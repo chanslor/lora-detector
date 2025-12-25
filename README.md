@@ -14,9 +14,10 @@ A portable LoRa signal detector built on the Heltec WiFi LoRa 32 V3. Scans the 9
 
 ## Features
 
-- **8 Display Modes** - Cycle with PRG button
+- **16 Display Modes** - Cycle with PRG button (8 general + 8 frequency-specific)
 - **Frequency Hopping** - Scans 8 frequencies across 903-923 MHz
 - **Channel Activity Detection (CAD)** - Hardware-based LoRa preamble detection
+- **Per-Frequency Monitoring** - Dedicated heartbeat display for each frequency
 - **Stats Tracking** - Uptime, detections, activity %, peak activity
 - **WiFi Upload** - Double-click to upload stats to cloud dashboard
 - **Cloud Dashboard** - View real-time and historical data at https://lora-detector.fly.dev/
@@ -202,6 +203,39 @@ Cell signal tower style bars.
 ```
 Detailed text statistics. Shows "** HOT **" when activity exceeds 10%.
 
+### 9-16. FREQUENCY-SPECIFIC MONITORS
+
+Each frequency has its own dedicated heartbeat display:
+
+```
+┌─────────────────────────────────┐
+│        917.5 MHz                │
+│      Amazon Sidewalk            │
+│─────────────────────────────────│
+│ ____╱╲____╱╲_______╱╲____      │
+│                                 │
+│ Det:45   Act:12%    >>>         │
+└─────────────────────────────────┘
+```
+
+| Mode | Frequency | Primary Use |
+|------|-----------|-------------|
+| 9 | 903.9 MHz | LoRaWAN Ch0 |
+| 10 | 906.3 MHz | LoRaWAN Uplink |
+| 11 | 909.1 MHz | LoRaWAN Mid |
+| 12 | 911.9 MHz | Meshtastic |
+| 13 | 914.9 MHz | LoRaWAN |
+| 14 | 917.5 MHz | Amazon Sidewalk |
+| 15 | 920.1 MHz | LoRaWAN |
+| 16 | 922.9 MHz | LoRaWAN Downlink |
+
+Each frequency-specific screen shows:
+- **Title** - Frequency value (e.g., "917.5 MHz")
+- **Subtitle** - What the frequency is used for (e.g., "Amazon Sidewalk")
+- **Heartbeat** - EKG-style waveform showing detections on that frequency only
+- **Stats** - Detection count and activity % for that specific frequency
+- **Indicator** - Shows ">>>" when detecting on that frequency, "***" when scanning it
+
 ---
 
 ## Controls
@@ -209,13 +243,13 @@ Detailed text statistics. Shows "** HOT **" when activity exceeds 10%.
 | Action | Function |
 |--------|----------|
 | **Single click** PRG | Cycle to next display mode |
-| **Double click** PRG | Connect WiFi and upload stats to server |
+| **Double click** PRG | Connect WiFi and upload stats to server (must be fast - within 250ms) |
 
 ---
 
 ## WiFi Upload Feature
 
-Double-click PRG to upload stats to the cloud dashboard.
+Double-click PRG quickly (within 250ms) to upload stats to the cloud dashboard.
 
 ### What Gets Uploaded
 ```json

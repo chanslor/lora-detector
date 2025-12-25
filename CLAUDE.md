@@ -14,9 +14,10 @@ A portable LoRa signal detector for the Heltec WiFi LoRa 32 V3. Scans the 900 MH
 
 ## Features
 
-- **8 Display Modes** - SPECTRUM, RADAR, BIG_PERCENT, METER, HEARTBEAT, TERMINAL, TOWER, STATS
+- **16 Display Modes** - 8 general views + 8 frequency-specific heartbeat monitors
 - **Frequency Hopping** - Scans 8 frequencies across 903-923 MHz
 - **Channel Activity Detection (CAD)** - Hardware-based LoRa preamble detection
+- **Per-Frequency Monitoring** - Dedicated heartbeat display for each frequency
 - **Double-click WiFi Upload** - Upload stats to cloud dashboard
 - **Cloud Dashboard** - https://lora-detector.fly.dev/
 - **SQLite Persistence** - 1 year data retention with historical summaries
@@ -48,7 +49,9 @@ Installed automatically by deploy.sh:
 
 ## Display Modes
 
-Press PRG button (single click) to cycle:
+Press PRG button (single click) to cycle through 16 modes:
+
+### General Views (Modes 1-8)
 
 | Mode | Description |
 |------|-------------|
@@ -56,17 +59,38 @@ Press PRG button (single click) to cycle:
 | RADAR | Classic radar sweep with detection blips |
 | BIG_PERCENT | Large activity percentage display |
 | METER | Analog VU meter with needle animation |
-| HEARTBEAT | EKG-style scrolling waveform (spikes = detections) |
+| HEARTBEAT | EKG-style scrolling waveform (all frequencies) |
 | TERMINAL | Retro hacker terminal with scrolling log |
 | TOWER | Cell signal tower style bars |
 | STATS | Detailed text statistics with "HOT" indicator |
+
+### Frequency-Specific Views (Modes 9-16)
+
+Each frequency has its own dedicated heartbeat monitor:
+
+| Mode | Frequency | Primary Use |
+|------|-----------|-------------|
+| 9 | 903.9 MHz | LoRaWAN Ch0 |
+| 10 | 906.3 MHz | LoRaWAN Uplink |
+| 11 | 909.1 MHz | LoRaWAN Mid |
+| 12 | 911.9 MHz | Meshtastic |
+| 13 | 914.9 MHz | LoRaWAN |
+| 14 | 917.5 MHz | Amazon Sidewalk |
+| 15 | 920.1 MHz | LoRaWAN |
+| 16 | 922.9 MHz | LoRaWAN Downlink |
+
+Each frequency screen shows:
+- Title with frequency value
+- Subtitle with primary use (LoRaWAN, Sidewalk, Meshtastic, etc.)
+- EKG heartbeat waveform for that frequency only
+- Detection count and activity % for that specific frequency
 
 ## Button Controls
 
 | Action | Function |
 |--------|----------|
 | Single click PRG | Cycle to next display mode |
-| Double click PRG | Connect WiFi and upload stats to server |
+| Double click PRG | Connect WiFi and upload stats (must be fast - within 250ms) |
 
 ## How It Works
 
@@ -169,8 +193,8 @@ Key constants in `lora-detector.ino`:
 #define DISPLAY_Y_OFFSET    6       // Offset if case covers top of display
 #define CAD_INTERVAL_MS     50      // Scan rate
 #define FREQ_HOP_SCANS      3       // Scans per frequency before hopping
-#define DOUBLE_CLICK_TIME   400     // ms between clicks for double-click
-#define CLICK_TIMEOUT       500     // ms to wait before processing click
+#define DOUBLE_CLICK_TIME   250     // ms between clicks for double-click (fast!)
+#define CLICK_TIMEOUT       350     // ms to wait before processing click
 
 const float SCAN_FREQUENCIES[] = {
   903.9, 906.3, 909.1, 911.9, 914.9, 917.5, 920.1, 922.9

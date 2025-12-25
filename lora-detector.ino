@@ -11,9 +11,14 @@
  *   2. RADAR       - Classic radar sweep with blips
  *   3. BIG PERCENT - Large activity percentage display
  *   4. METER       - Analog VU meter style gauge
- *   5. HEARTBEAT   - EKG-style scrolling waveform
+ *   5. HEARTBEAT   - EKG-style scrolling waveform (all frequencies)
  *   6. TERMINAL    - Retro hacker terminal with log
  *   7. TOWER       - Cell signal tower bars
+ *   8. STATS       - Session statistics
+ *   9-16. FREQ SPECIFIC - Per-frequency heartbeat monitors:
+ *         903.9 MHz (LoRaWAN), 906.3 MHz (LoRaWAN), 909.1 MHz (LoRaWAN)
+ *         911.9 MHz (Meshtastic), 914.9 MHz (LoRaWAN), 917.5 MHz (Sidewalk)
+ *         920.1 MHz (LoRaWAN), 922.9 MHz (LoRaWAN Downlink)
  *
  * Hardware: Heltec WiFi LoRa 32 V3
  * Library: RadioLib, U8g2
@@ -66,12 +71,34 @@ enum DisplayMode {
   MODE_TERMINAL,
   MODE_TOWER,
   MODE_STATS,
+  // Frequency-specific modes (8 frequencies)
+  MODE_FREQ_903,   // 903.9 MHz - LoRaWAN Ch0
+  MODE_FREQ_906,   // 906.3 MHz - LoRaWAN Uplink
+  MODE_FREQ_909,   // 909.1 MHz - LoRaWAN
+  MODE_FREQ_911,   // 911.9 MHz - Meshtastic
+  MODE_FREQ_914,   // 914.9 MHz - LoRaWAN
+  MODE_FREQ_917,   // 917.5 MHz - Amazon Sidewalk
+  MODE_FREQ_920,   // 920.1 MHz - LoRaWAN
+  MODE_FREQ_922,   // 922.9 MHz - LoRaWAN Downlink
   NUM_MODES
 };
 
 DisplayMode currentMode = MODE_SPECTRUM;
 const char* modeNames[] = {
-  "SPECTRUM", "RADAR", "BIG %", "METER", "HEARTBEAT", "TERMINAL", "TOWER", "STATS"
+  "SPECTRUM", "RADAR", "BIG %", "METER", "HEARTBEAT", "TERMINAL", "TOWER", "STATS",
+  "903.9MHz", "906.3MHz", "909.1MHz", "911.9MHz", "914.9MHz", "917.5MHz", "920.1MHz", "922.9MHz"
+};
+
+// Frequency labels for display
+const char* freqLabels[] = {
+  "LoRaWAN Ch0",      // 903.9
+  "LoRaWAN Uplink",   // 906.3
+  "LoRaWAN Mid",      // 909.1
+  "Meshtastic",       // 911.9
+  "LoRaWAN",          // 914.9
+  "Amazon Sidewalk",  // 917.5
+  "LoRaWAN",          // 920.1
+  "LoRaWAN Downlink"  // 922.9
 };
 
 // ============================================
@@ -117,10 +144,14 @@ int pulseSize = 0;
 int radarAngle = 0;
 int spectrumBounce[NUM_FREQUENCIES];
 
-// Heartbeat waveform buffer
+// Heartbeat waveform buffer (global - all frequencies)
 #define WAVEFORM_WIDTH 128
 int waveform[WAVEFORM_WIDTH];
 int waveformIndex = 0;
+
+// Per-frequency waveform buffers
+int freqWaveform[NUM_FREQUENCIES][WAVEFORM_WIDTH];
+int freqWaveformIndex[NUM_FREQUENCIES];
 
 // Terminal log buffer
 #define TERMINAL_LINES 5
@@ -144,8 +175,8 @@ int hotThreshold = 10;  // Activity % to trigger "HOT" indicator
 // Double-click detection
 unsigned long lastClickTime = 0;
 int clickCount = 0;
-#define DOUBLE_CLICK_TIME 400  // ms between clicks to count as double-click
-#define CLICK_TIMEOUT 500      // ms to wait before processing single click
+#define DOUBLE_CLICK_TIME 250  // ms between clicks to count as double-click (fast!)
+#define CLICK_TIMEOUT 350      // ms to wait before processing single click
 
 // WiFi/Upload state
 bool isUploading = false;
@@ -180,6 +211,7 @@ void drawHeartbeatView();
 void drawTerminalView();
 void drawTowerView();
 void drawStatsView();
+void drawFreqHeartbeatView(int freqIdx);
 void drawBlips(int cx, int cy, int maxR);
 void updateAnimations();
 void addTerminalLine(const char* line);
@@ -237,7 +269,9 @@ void setup() {
     freqActivityPercent[f] = 0;
     freqHistoryIndex[f] = 0;
     spectrumBounce[f] = 0;
+    freqWaveformIndex[f] = 0;
     for (int h = 0; h < HISTORY_PER_FREQ; h++) freqHistory[f][h] = false;
+    for (int w = 0; w < WAVEFORM_WIDTH; w++) freqWaveform[f][w] = 32;
   }
 
   startTime = millis();
@@ -254,11 +288,12 @@ void setup() {
   display.drawStr(5, 30, "903-923 MHz Band");
   display.drawStr(5, 45, "PRG: cycle views");
   display.setFont(u8g2_font_5x7_tf);
-  display.drawStr(5, 60, "8 display modes!");
+  display.drawStr(5, 60, "16 display modes!");
   display.sendBuffer();
   delay(2000);
 
   Serial.println("Display modes: SPECTRUM, RADAR, BIG%, METER, HEARTBEAT, TERMINAL, TOWER, STATS");
+  Serial.println("Plus 8 frequency-specific modes (903.9-922.9 MHz)");
   Serial.println("Press PRG button to cycle\n");
 }
 
@@ -399,9 +434,13 @@ void processCADResult() {
     freqActivityPercent[f] = (count * 100) / HISTORY_PER_FREQ;
   }
 
-  // Update waveform for heartbeat view
+  // Update waveform for heartbeat view (global)
   waveform[waveformIndex] = detected ? 10 : 32;
   waveformIndex = (waveformIndex + 1) % WAVEFORM_WIDTH;
+
+  // Update per-frequency waveform (reuse fi from above)
+  freqWaveform[fi][freqWaveformIndex[fi]] = detected ? 10 : 32;
+  freqWaveformIndex[fi] = (freqWaveformIndex[fi] + 1) % WAVEFORM_WIDTH;
 
   if (scansOnCurrentFreq >= FREQ_HOP_SCANS) {
     scansOnCurrentFreq = 0;
@@ -435,6 +474,16 @@ void updateDisplay() {
     case MODE_TERMINAL:   drawTerminalView(); break;
     case MODE_TOWER:      drawTowerView(); break;
     case MODE_STATS:      drawStatsView(); break;
+    // Frequency-specific heartbeat views
+    case MODE_FREQ_903:   drawFreqHeartbeatView(0); break;
+    case MODE_FREQ_906:   drawFreqHeartbeatView(1); break;
+    case MODE_FREQ_909:   drawFreqHeartbeatView(2); break;
+    case MODE_FREQ_911:   drawFreqHeartbeatView(3); break;
+    case MODE_FREQ_914:   drawFreqHeartbeatView(4); break;
+    case MODE_FREQ_917:   drawFreqHeartbeatView(5); break;
+    case MODE_FREQ_920:   drawFreqHeartbeatView(6); break;
+    case MODE_FREQ_922:   drawFreqHeartbeatView(7); break;
+    default: break;
   }
 
   display.sendBuffer();
@@ -833,6 +882,72 @@ void updateStats() {
     detectionsLastMinute = detectionCount - detectionsAtLastMinute;
     detectionsAtLastMinute = detectionCount;
     lastMinuteCheck = now;
+  }
+}
+
+// ============================================
+// FREQUENCY-SPECIFIC HEARTBEAT VIEW
+// ============================================
+
+void drawFreqHeartbeatView(int freqIdx) {
+  const int Y = DISPLAY_Y_OFFSET;
+  char buf[24];
+
+  // Title: Frequency value
+  display.setFont(u8g2_font_6x10_tf);
+  sprintf(buf, "%.1f MHz", SCAN_FREQUENCIES[freqIdx]);
+  int titleWidth = display.getStrWidth(buf);
+  display.drawStr((128 - titleWidth) / 2, 8 + Y, buf);
+
+  // Subtitle: What this frequency is used for
+  display.setFont(u8g2_font_5x7_tf);
+  int labelWidth = display.getStrWidth(freqLabels[freqIdx]);
+  display.drawStr((128 - labelWidth) / 2, 17 + Y, freqLabels[freqIdx]);
+
+  display.drawLine(0, 19 + Y, 127, 19 + Y);
+
+  // Draw per-frequency waveform
+  int baseY = 38 + Y;
+  int wfIdx = freqWaveformIndex[freqIdx];
+
+  for (int i = 0; i < WAVEFORM_WIDTH - 1; i++) {
+    int idx1 = (wfIdx + i) % WAVEFORM_WIDTH;
+    int idx2 = (wfIdx + i + 1) % WAVEFORM_WIDTH;
+
+    int y1 = freqWaveform[freqIdx][idx1];
+    int y2 = freqWaveform[freqIdx][idx2];
+
+    // Convert to screen coordinates
+    if (y1 > 30) y1 = baseY + random(-1, 2);
+    else y1 = baseY - 14;  // Spike up
+
+    if (y2 > 30) y2 = baseY + random(-1, 2);
+    else y2 = baseY - 14;
+
+    display.drawLine(i, y1, i + 1, y2);
+  }
+
+  // Stats bar at bottom
+  display.setFont(u8g2_font_5x7_tf);
+
+  // Detection count for this frequency
+  sprintf(buf, "Det:%d", freqActivityCount[freqIdx]);
+  display.drawStr(0, 63, buf);
+
+  // Activity percentage for this frequency
+  sprintf(buf, "Act:%d%%", freqActivityPercent[freqIdx]);
+  display.drawStr(50, 63, buf);
+
+  // Indicator if currently scanning this frequency
+  if (currentFreqIndex == freqIdx) {
+    display.drawStr(100, 63, loraDetected ? ">>>" : "***");
+  } else {
+    display.drawStr(100, 63, "---");
+  }
+
+  // Flash border on detection for this frequency
+  if (currentFreqIndex == freqIdx && loraDetected) {
+    display.drawFrame(0, Y, 128, 64 - Y);
   }
 }
 
