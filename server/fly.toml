@@ -1,0 +1,21 @@
+app = 'lora-detector'
+primary_region = 'dfw'
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = 'lora_data'
+  destination = '/data'

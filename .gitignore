@@ -1,0 +1,9 @@
+# Build artifacts
+build/
+
+# Secrets (WiFi credentials, API keys)
+secrets.h
+
+# IDE
+.vscode/
+*.swp
